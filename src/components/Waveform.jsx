@@ -28,7 +28,14 @@ const INITIAL_PARAMS = {
     oceanAmp: 4,
     oceanSpeed: 0.2,
     density: 1.0,
-    showLines: 0
+    showLines: 1
+};
+
+const DEFAULT_ORB_COLOR = '#00c8ff';
+
+const hexToRgb = (hex) => {
+    const value = hex.replace('#', '');
+    return `${parseInt(value.slice(0, 2), 16)}, ${parseInt(value.slice(2, 4), 16)}, ${parseInt(value.slice(4, 6), 16)}`;
 };
 
 // ... (CONTROL_GROUPS context skipped, assume it is below)
@@ -64,7 +71,7 @@ const ControlSlider = ({ label, value, min, max, step, onChange, info }) => (
     </div>
 );
 
-export default function Waveform({ isSimulating, isMuted }) {
+export default function Waveform({ isSimulating, isMuted, onToggleMode, onToggleMute }) {
     const canvasRef = useRef(null);
     const { initAudio, getWaveformData, isReady, error } = useAudioAnalyzer({
         fftSize: 2048,
@@ -76,6 +83,8 @@ export default function Waveform({ isSimulating, isMuted }) {
     const timeRef = useRef(0);
     const lineOpacityRef = useRef(0);
     const isMutedRef = useRef(isMuted);
+    const [orbColor, setOrbColor] = useState(DEFAULT_ORB_COLOR);
+    const orbColorRef = useRef(hexToRgb(DEFAULT_ORB_COLOR));
 
     useEffect(() => {
         isMutedRef.current = isMuted;
@@ -105,14 +114,15 @@ export default function Waveform({ isSimulating, isMuted }) {
         paramsRef.current = newParams;
     };
 
+    const updateOrbColor = (color) => {
+        setOrbColor(color);
+        orbColorRef.current = hexToRgb(color);
+    };
+
     const saveDefaults = () => {
         setDefaults(params);
         localStorage.setItem('WAVEFORM_DEFAULTS', JSON.stringify(params));
     };
-
-    useEffect(() => {
-        updateParam('showLines', isSimulating ? 1 : 0);
-    }, [isSimulating]);
 
     const resetParams = () => {
         setParams(defaults);
@@ -346,7 +356,7 @@ export default function Waveform({ isSimulating, isMuted }) {
                 }
                 const rowAlpha = Math.max(0, 1.0 - (Math.abs(r - centerRow) / (GRID_ROWS / 2.5))) * 0.5 * lineOpacityRef.current;
                 if (rowAlpha > 0) {
-                    ctx.strokeStyle = `rgba(0, 255, 255, ${rowAlpha})`;
+                    ctx.strokeStyle = `rgba(${orbColorRef.current}, ${rowAlpha})`;
                     ctx.stroke();
                 }
             }
@@ -360,7 +370,7 @@ export default function Waveform({ isSimulating, isMuted }) {
                     if (!started) { ctx.moveTo(p.x, p.y); started = true; }
                     else { ctx.lineTo(p.x, p.y); }
                 }
-                ctx.strokeStyle = `rgba(0, 200, 255, ${0.15 * lineOpacityRef.current})`;
+                ctx.strokeStyle = `rgba(${orbColorRef.current}, ${0.15 * lineOpacityRef.current})`;
                 ctx.stroke();
             }
         }
@@ -371,7 +381,7 @@ export default function Waveform({ isSimulating, isMuted }) {
                 const p = finalPoints[r][c];
                 if (!p || p.alpha < 0.05) continue;
                 const size = 1.5 * p.scale;
-                ctx.fillStyle = `rgba(180, 240, 255, ${p.alpha})`;
+                ctx.fillStyle = `rgba(${orbColorRef.current}, ${p.alpha})`;
                 ctx.beginPath();
                 ctx.arc(p.x, p.y, size, 0, Math.PI * 2);
                 ctx.fill();
@@ -410,6 +420,50 @@ export default function Waveform({ isSimulating, isMuted }) {
                             <span style={{ color: '#fff', fontSize: '14px', fontWeight: 'bold', letterSpacing: '1px' }}>SYSTEM CONTROLS</span>
                         </div>
                         <div style={{ display: 'flex', gap: '10px' }}>
+                            <label style={{
+                                display: 'flex', alignItems: 'center', gap: '8px', color: 'rgba(255,255,255,0.65)',
+                                fontSize: '10px', fontWeight: 600, letterSpacing: '0.7px'
+                            }}>
+                                ORB COLOR
+                                <input
+                                    type="color"
+                                    value={orbColor}
+                                    onInput={(event) => updateOrbColor(event.currentTarget.value)}
+                                    aria-label="Orb color"
+                                    style={{
+                                        width: '30px', height: '24px', padding: '2px', borderRadius: '4px',
+                                        border: '1px solid rgba(255,255,255,0.2)', background: 'transparent', cursor: 'pointer'
+                                    }}
+                                />
+                            </label>
+                            <button
+                                type="button"
+                                onClick={onToggleMode}
+                                aria-label={`Switch to ${isSimulating ? 'microphone' : 'simulation'} mode`}
+                                style={{
+                                    background: 'rgba(0, 140, 255, 0.14)', color: '#5cb5ff', border: '1px solid rgba(0, 140, 255, 0.45)',
+                                    borderRadius: '4px', padding: '4px 12px', fontSize: '11px', cursor: 'pointer',
+                                    transition: 'all 0.2s', fontWeight: 600
+                                }}
+                            >
+                                SWITCH TO {isSimulating ? 'MICROPHONE' : 'SIMULATION'}
+                            </button>
+                            {!isSimulating && (
+                                <button
+                                    type="button"
+                                    onClick={onToggleMute}
+                                    aria-pressed={isMuted}
+                                    style={{
+                                        background: isMuted ? 'rgba(255, 68, 68, 0.2)' : 'rgba(255,255,255,0.04)',
+                                        color: isMuted ? '#ff6b6b' : 'rgba(255,255,255,0.7)',
+                                        border: `1px solid ${isMuted ? 'rgba(255,68,68,0.45)' : 'rgba(255,255,255,0.16)'}`,
+                                        borderRadius: '4px', padding: '4px 12px', fontSize: '11px', cursor: 'pointer',
+                                        transition: 'all 0.2s', fontWeight: 600
+                                    }}
+                                >
+                                    {isMuted ? 'UNMUTE MIC' : 'MUTE MIC'}
+                                </button>
+                            )}
                             <button onClick={saveDefaults} style={{
                                 background: 'transparent', color: '#0ff', border: '1px solid rgba(0,255,255,0.3)',
                                 borderRadius: '4px', padding: '4px 12px', fontSize: '11px', cursor: 'pointer',
